@@ -128,9 +128,9 @@ class IioInfo:
         return sum([chan.typ_len for chan in self.channel])
 
 
-def main():
+def view_fifo(iio_dev_name):
     """run this"""
-    info = IioInfo("icm20602")
+    info = IioInfo(iio_dev_name)
     now = time.time()
     sys.stdout.write("sample_freq\t")
     for chan in sorted(info.channel):
@@ -153,7 +153,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        view_fifo("icm20602")
     except KeyboardInterrupt:
         print("")
         sys.exit(0)
