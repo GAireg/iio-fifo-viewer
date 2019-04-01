@@ -10,6 +10,8 @@ import sys
 from datetime import datetime
 
 SYSFS_BASEPATH = "/sys/bus/iio/devices/"
+# the timestamp is 64 bit aligned
+TIMESTAMP_ALIGNMENT=64/8
 
 def match_file_content(filename, content):
     """Checks if the file at fil has the given conten"""
@@ -45,11 +47,16 @@ def type_to_unpack(typ):
     ret = ret + char
     return (ret, leng)
 
+def align(value, alignment):
+    """Returns an aligned value equal to or lager than value"""
+    floor, remainder = divmod(value, alignment)
+    return (floor + (1 if remainder > 0 else 0)) * alignment
+
 class ChunkReader(file):
     """Reads a file in defined chunks"""
     def __init__(self, filename, chunk_size):
         file.__init__(self, filename, "r")
-        self.chunk_size = chunk_size + 2
+        self.chunk_size = chunk_size
 
     def next(self):
         return self.read(self.chunk_size)
@@ -110,22 +117,24 @@ class IioInfo:
     def decorate(self, data):
         """converts a chunk of data to a list of name, value tupels"""
         ret = []
-        index = 0
+        byte_start = 0
+        byte_end = 0
         for chan in sorted(self.channel):
+            if chan.name == "timestamp":
+                byte_start = align(byte_start, TIMESTAMP_ALIGNMENT)
             if chan.typ_len == 0:
                 val = (chan.name, 0)
             else:
-                if chan.name == "timestamp":
-                    index += 2
-                rawval = struct.unpack(chan.typ_str, data[index:index+chan.typ_len])[0]
+                byte_end = byte_start + chan.typ_len
+                rawval = struct.unpack(chan.typ_str, data[byte_start:byte_end])[0]
                 val = (chan.name, ((rawval + float(chan.offset)) * float(chan.scale)))
             ret.append(val)
-            index = (index + chan.typ_len)
+            byte_start = byte_end
         return ret
 
     def get_chunk_size(self):
         """Get the total number of bytes in a chunk"""
-        return sum([chan.typ_len for chan in self.channel])
+        return align(sum([chan.typ_len for chan in self.channel]), TIMESTAMP_ALIGNMENT)
 
 
 def view_fifo(iio_dev_name):
